@@ -4,7 +4,7 @@
 
 # Compile the C++ file
 echo "Compiling crawler.cpp..."
-g++ -std=c++11 -o crawler crawler.cpp
+g++ -std=c++11 -o crawler crawler.cpp -Wall -Wextra -O2 -g -pthread
 
 # Test 1: Run the program with a valid URL
 echo "Running test 1: Connecting to http://example.com"
