@@ -71,9 +71,10 @@ int main(int argc, char **argv) {
 
     // Send GET request
     const char *http_get = "GET / HTTP/1.1\r\nHost: ";
-    const char *end_of_line = "\r\n\r\n";
+    const char *end_of_line = "\r\nConnection: close\r\n\r\n";
     char buffer[512];
     std::snprintf(buffer, sizeof(buffer), "%s%s%s", http_get, hostname.c_str(), end_of_line);
+    std::cout << "Sending GET request: " << buffer << std::endl;
 
     if (send(sockfd, buffer, std::strlen(buffer), 0) == -1) {
         std::perror("send");
