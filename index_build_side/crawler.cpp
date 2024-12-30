@@ -15,7 +15,7 @@ int main(int argc, char **argv) {
         return EXIT_FAILURE;
     }
 
-    httpDownloader(argv[1]);
+    httpsDownloader(argv[1]);
 
     return 0;
 }

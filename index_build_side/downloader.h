@@ -54,7 +54,6 @@ std::string httpDownloader(std::string url)
     char buffer[BUFFER_SIZE];
 	memset(buffer, 0, BUFFER_SIZE);
     std::snprintf(buffer, sizeof(buffer), "%s%s%s", http_get, hostname.c_str(), end_of_line);
-	std::cout << buffer << std::endl;
 
     if (send(sockfd, buffer, std::strlen(buffer), 0) == -1) {
         std::perror("send");
@@ -65,10 +64,11 @@ std::string httpDownloader(std::string url)
 
 	std::string Response = "";
 
-    // Read from socket and print to stdout until EOF
     int bytes_received;
     while ((bytes_received = recv(sockfd, buffer, sizeof(buffer), 0)) > 0) {
         Response += buffer;
+        std::cout << buffer;
+        memset(buffer, 0, BUFFER_SIZE);
     }
 
     if (bytes_received == -1) {
@@ -109,8 +109,8 @@ std::string getHostPathFromUrl(std::string url)
 	return path;
 }
 
-std::string httpsDownloader(const std::string &url) {
-    const int port = 443;
+std::string httpsDownloader(std::string url) {
+    int port = 443;
     std::string path = getHostPathFromUrl(url);
     std::string hostname = getHostnameFromUrl(url);
 
@@ -143,6 +143,10 @@ std::string httpsDownloader(const std::string &url) {
     }
 
     freeaddrinfo(address);
+
+    SSL_library_init();
+    OpenSSL_add_all_algorithms();
+    SSL_load_error_strings();
 
     // Initialize SSL
     SSL_CTX *ssl_ctx = SSL_CTX_new(TLS_client_method());
@@ -190,6 +194,8 @@ std::string httpsDownloader(const std::string &url) {
     int bytesRead;
     while ((bytesRead = SSL_read(conn, buffer, sizeof(buffer))) > 0) {
         response.append(buffer, bytesRead);
+        std::cout << buffer;
+        memset(buffer, 0, BUFFER_SIZE);
     }
 
     // Cleanup
