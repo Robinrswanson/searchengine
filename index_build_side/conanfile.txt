@@ -1,0 +1,9 @@
+[requires]
+openssl/3.0.0  # Replace with the desired version
+
+[generators]
+cmake
+gcc
+
+[options]
+openssl/*:shared=True
