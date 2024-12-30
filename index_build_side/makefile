@@ -1,18 +1,35 @@
+# Compiler
 CC = g++
-LDFLAGS += -L/opt/homebrew/opt/openssl/lib -lssl -lcrypto
-CXXFLAGS += -I/opt/homebrew/opt/openssl/include
 
-# Target executable
-all: crawler
+# OpenSSL Directory
+OPENSSL_DIR = /opt/homebrew/opt/openssl@3
 
-# Build the crawler executable
-crawler: crawler.o
-	$(CC) $(LDFLAGS) -o crawler crawler.o
+# Compiler Flags
+CXXFLAGS = -Wall -std=c++17 -I$(OPENSSL_DIR)/include
 
-# Compile the object file, explicitly dependent on the header file
-crawler.o: crawler.cpp downloader.h
-	$(CC) $(CXXFLAGS) -c crawler.cpp -o crawler.o
+# Linker Flags
+LDFLAGS = -L$(OPENSSL_DIR)/lib -lssl -lcrypto
+
+# Source Files
+SRCS = crawler.cpp downloader.cpp
+
+# Object Files
+OBJS = $(SRCS:.cpp=.o)
+
+# Target Executable
+TARGET = crawler
+
+# Default Target
+all: $(TARGET)
+
+# Build the target executable by linking all object files
+$(TARGET): $(OBJS)
+	$(CC) $(CXXFLAGS) -o $(TARGET) $(OBJS) $(LDFLAGS)
+
+# Compile .cpp files to .o files
+%.o: %.cpp downloader.h
+	$(CC) $(CXXFLAGS) -c $< -o $@
 
 # Clean up build artifacts
 clean:
-	rm -f *.o crawler
+	rm -f $(OBJS) $(TARGET)
