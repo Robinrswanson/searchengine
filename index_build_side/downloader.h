@@ -8,7 +8,7 @@
 #include <openssl/ssl.h>
 
 #define MAX_FILE_SIZE 256 * 1024
-#define PACKET_SIZE 1024
+#define BUFFER_SIZE 1024
 
 std::string httpDownloader(std::string);
 std::string httpsDownloader(std::string);
@@ -29,42 +29,52 @@ std::string httpDownloader(std::string url)
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = IPPROTO_TCP;
 
-    if (getaddrinfo( hostname, port, &hints, &address ) != 0) {
+    if (getaddrinfo( hostname.c_str(), std::to_string(port).c_str(), &hints, &address ) != 0) {
         std::perror("getaddrinfo");
-        return EXIT_FAILURE;
+        return std::to_string(EXIT_FAILURE);
     }
 
     int sockfd = socket(address->ai_family, address->ai_socktype, address->ai_protocol);
     if (sockfd == -1) {
         std::perror("socket");
         freeaddrinfo(address);
-        return EXIT_FAILURE;
+        return std::to_string(EXIT_FAILURE);
     }
 
 	if (connect(sockfd, address->ai_addr, sizeof(struct sockaddr)) != 0) {
         std::perror("connect");
         close(sockfd);
         freeaddrinfo(address);
-        return EXIT_FAILURE;
+        return std::to_string(EXIT_FAILURE);
 	}
 
-	std::string send_data = "GET " + path + " HTTP/1.1\r\nHOST:" + hostname + "\r\nConnection: Close\r\n\r\n";
-	if (send(sockfd, send_data.c_str(), strlen(send_data.c_str()), 0) < 0) {
-	    std::perror("send");
+    // Send GET request
+    const char *http_get = "GET / HTTP/1.1\r\nHost: ";
+    const char *end_of_line = "\r\nConnection: close\r\n\r\n";
+    char buffer[BUFFER_SIZE];
+	memset(buffer, 0, BUFFER_SIZE);
+    std::snprintf(buffer, sizeof(buffer), "%s%s%s", http_get, hostname.c_str(), end_of_line);
+	std::cout << buffer << std::endl;
+
+    if (send(sockfd, buffer, std::strlen(buffer), 0) == -1) {
+        std::perror("send");
         close(sockfd);
         freeaddrinfo(address);
-        return EXIT_FAILURE;
+        return std::to_string(EXIT_FAILURE);
     }
 
-	char buffer[PACKET_SIZE];
 	std::string Response = "";
 
+    // Read from socket and print to stdout until EOF
     int bytes_received;
     while ((bytes_received = recv(sockfd, buffer, sizeof(buffer), 0)) > 0) {
         Response += buffer;
     }
 
-	close(sock);
+    if (bytes_received == -1) {
+        std::perror("recv");
+    }
+	close(sockfd);
     freeaddrinfo(address);
 
 	return Response;
@@ -105,7 +115,7 @@ std::string httpsDownloader(const std::string &url) {
     std::string hostname = getHostnameFromUrl(url);
 
     // Resolve the address
-    struct addrinfo hints{}, *address;
+    struct addrinfo hints, *address;
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
@@ -160,12 +170,13 @@ std::string httpsDownloader(const std::string &url) {
     }
 
     // Send GET request
-    std::ostringstream request;
-    request << "GET " << path << " HTTP/1.1\r\n"
-            << "Host: " << hostname << "\r\n"
-            << "Connection: close\r\n\r\n";
+    const char *http_get = "GET / HTTP/1.1\r\nHost: ";
+    const char *end_of_line = "\r\nConnection: close\r\n\r\n";
+    char buffer[BUFFER_SIZE];
+	memset(buffer, 0, BUFFER_SIZE);
+    std::snprintf(buffer, sizeof(buffer), "%s%s%s", http_get, hostname.c_str(), end_of_line);
 
-    if (SSL_write(conn, request.str().c_str(), request.str().length()) <= 0) {
+    if (SSL_write(conn, buffer, BUFFER_SIZE) <= 0) {
         perror("SSL_write");
         SSL_shutdown(conn);
         SSL_free(conn);
@@ -176,7 +187,6 @@ std::string httpsDownloader(const std::string &url) {
 
     // Read the response
     std::string response;
-    char buffer[PACKET_SIZE];
     int bytesRead;
     while ((bytesRead = SSL_read(conn, buffer, sizeof(buffer))) > 0) {
         response.append(buffer, bytesRead);
@@ -189,94 +199,4 @@ std::string httpsDownloader(const std::string &url) {
     close(sockfd);
 
     return response;
-}
-
-{
-	int port = 443;
-	std::string path = getHostPathFromUrl(url);
-	std::string hostname = getHostnameFromUrl(url);
-
-    struct addrinfo *address, hints;
-    memset( &hints, 0, sizeof( hints ) );
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_protocol = IPPROTO_TCP;
-
-    if (getaddrinfo( hostname, port, &hints, &address ) != 0) {
-        std::perror("getaddrinfo");
-        return EXIT_FAILURE;
-    }
-
-    int sockfd = socket(address->ai_family, address->ai_socktype, address->ai_protocol);
-    if (sockfd == -1) {
-        std::perror("socket");
-        freeaddrinfo(address);
-        return EXIT_FAILURE;
-    }
-
-	if (connect(sockfd, address->ai_addr, sizeof(struct sockaddr)) != 0) {
-        std::perror("connect");
-        close(sockfd);
-        freeaddrinfo(address);
-        return EXIT_FAILURE;
-	}
-
-	// initialize OpenSSL - do this once and stash ssl_ctx in a global var
-	SSL_load_error_std::strings();
-	SSL_CTX *ssl_ctx = SSL_CTX_new(SSLv23_client_method());
-	SSL_library_init();
-
-	// create an SSL connection and attach it to the socket
-	SSL *conn = SSL_new(ssl_ctx);
-	SSL_set_fd(conn, sockfd);
-
-	// perform the SSL/TLS handshake with the server - when on the
-	// server side, this would use SSL_accept()
-	int err = SSL_connect(conn);
-	if (err != 1)
-	{
-		// facing this error with https://aave.com/, some certification failing...
-		return "SSL_connect() failed.";
-	}
-
-	// now proceed with HTTP traffic,
-	//     using SSL_read instead of recv() and
-	//     SSL_write instead of send(),
-	std::string getRequest = "GET " + path + " HTTP/1.1\r\n" + "Host: " + hostname + "\r\n" +
-											+"Connection: close\r\n\r\n";
-
-	char tempBuff[10000];
-	strcpy(tempBuff, getRequest.c_str());
-
-	int writeRet = SSL_write(conn, tempBuff, getRequest.size());
-	if (writeRet < 0)
-	{
-		return "Send Request Failed.";
-	}
-
-	std::string httpResponse = "";
-	char ptr[PACKET_SIZE];
-	int totalBytesRead = 0;
-	int bytesRead;
-
-	do
-	{
-		bytesRead = SSL_read(conn, ptr, sizeof(ptr) / sizeof(ptr[0]));
-		totalBytesRead += bytesRead;
-		httpResponse += std::string(ptr);
-		if (httpResponse.size() > MAX_FILE_SIZE)
-		{
-			httpResponse = "";
-			break;
-		}
-	} while (bytesRead);
-
-	//and SSL_shutdown/SSL_free before close()
-	SSL_shutdown(conn);
-	SSL_free(conn);
-	close(sock);
-
-
-	return httpResponse;
-
 }
