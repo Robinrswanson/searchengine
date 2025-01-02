@@ -276,3 +276,14 @@ Response httpsDownloader(std::string& url) {
     close(sockfd);
     return response;
 }
+
+Response downloadPage(std::string& url) {
+    if (url.find("https://") == 0) {
+        return httpsDownloader(url);
+    } else if (url.find("http://") == 0) {
+        return httpDownloader(url);
+    } else {
+        std::cerr << "Invalid URL scheme: " << url << std::endl;
+        return {};
+    }
+}
