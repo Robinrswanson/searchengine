@@ -31,21 +31,21 @@ std::string httpDownloader(const std::string& url)
 
     if (getaddrinfo(hostname.c_str(), portStr.c_str(), &hints, &address) != 0) {
         std::perror("getaddrinfo");
-        return std::to_string(EXIT_FAILURE);
+        return "";
     }
 
     int sockfd = socket(address->ai_family, address->ai_socktype, address->ai_protocol);
     if (sockfd == -1) {
         std::perror("socket");
         freeaddrinfo(address);
-        return std::to_string(EXIT_FAILURE);
+        return "";
     }
 
     if (connect(sockfd, address->ai_addr, address->ai_addrlen) != 0) {
         std::perror("connect");
         close(sockfd);
         freeaddrinfo(address);
-        return std::to_string(EXIT_FAILURE);
+        return "";
     }
 
     freeaddrinfo(address);
@@ -73,7 +73,6 @@ std::string httpDownloader(const std::string& url)
     while ((bytes_received = recv(sockfd, buffer, sizeof(buffer) - 1, 0)) > 0) {
         buffer[bytes_received] = '\0'; // Null-terminate the buffer
         Response += buffer;
-        std::cout << buffer;
         memset(buffer, 0, BUFFER_SIZE);
     }
 
@@ -213,7 +212,6 @@ std::string httpsDownloader(const std::string& url) {
     while ((bytesRead = SSL_read(conn, buffer, sizeof(buffer) - 1)) > 0) {
         buffer[bytesRead] = '\0'; // Null-terminate the buffer
         response.append(buffer, bytesRead);
-        std::cout << buffer;
         memset(buffer, 0, BUFFER_SIZE);
     }
 
