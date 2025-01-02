@@ -6,7 +6,11 @@
 #include <unordered_map>
 #include <utility>
 
-using ParsedData = std::pair<std::string, std::vector<std::string>>;
+struct ParsedData {
+    std::string url;                     // The URL of the parsed page
+    std::vector<std::string> words;      // Words extracted from the page
+    std::vector<std::string> links;      // Links found on the page
+};
 
 ParsedData parseHTML(const std::string& url, const std::string& html);
 
