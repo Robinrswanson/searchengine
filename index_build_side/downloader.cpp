@@ -13,75 +13,126 @@
 #define MAX_FILE_SIZE 256 * 1024
 #define BUFFER_SIZE 1024
 
-std::string httpDownloader(const std::string& url)
-{
+#include <sstream>
+#include <string>
+#include <algorithm>
+#include <cstdlib> // for std::stoi
+
+ResponseHeader handle_response(const std::string& response) {
+    ResponseHeader header;
+    std::istringstream response_stream(response);
+    std::string line;
+
+    while (std::getline(response_stream, line) && line != "\r") {
+        if (line.find("HTTP/") == 0) {
+            // Extract status code from the status line
+            size_t status_start = line.find(" ") + 1; // First space
+            if (status_start != std::string::npos) {
+                size_t status_end = line.find(" ", status_start); // Second space
+                if (status_end != std::string::npos) {
+                    try {
+                        header.status = std::stoi(line.substr(status_start, status_end - status_start));
+                    } catch (const std::exception& e) {
+                        header.status = 0; // Default to 0 if conversion fails
+                    }
+                }
+            }
+        } else if (line.find("Content-Type:") == 0) {
+            header.contentType = line.substr(13); // Extract value after "Content-Type:"
+        } else if (line.find("Content-Length:") == 0) {
+            std::string length_str = line.substr(15); // Extract value after "Content-Length:"
+            try {
+                header.contentLength = std::stoi(length_str);
+            } catch (const std::exception& e) {
+                header.contentLength = -1; // Default to -1 if conversion fails
+            }
+        }
+    }
+
+    // Trim whitespace from contentType
+    auto trim = [](std::string& str) {
+        str.erase(0, str.find_first_not_of(" \t\r\n"));
+        str.erase(str.find_last_not_of(" \t\r\n") + 1);
+    };
+
+    trim(header.contentType);
+
+    return header;
+}
+
+Response httpDownloader(std::string& url) {
     int port = 80;
 
     std::string path = getHostPathFromUrl(url);
     std::string hostname = getHostnameFromUrl(url);
 
-    struct addrinfo hints, *address;
+    struct addrinfo hints{}, *address;
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = IPPROTO_TCP;
 
-    // Convert port number to string
     std::string portStr = std::to_string(port);
 
     if (getaddrinfo(hostname.c_str(), portStr.c_str(), &hints, &address) != 0) {
         std::perror("getaddrinfo");
-        return "";
+        return {};
     }
 
     int sockfd = socket(address->ai_family, address->ai_socktype, address->ai_protocol);
     if (sockfd == -1) {
         std::perror("socket");
         freeaddrinfo(address);
-        return "";
+        return {};
     }
 
     if (connect(sockfd, address->ai_addr, address->ai_addrlen) != 0) {
         std::perror("connect");
         close(sockfd);
         freeaddrinfo(address);
-        return "";
+        return {};
     }
 
     freeaddrinfo(address);
 
-    // Construct GET request with the correct path
-    const char *http_get_start = "GET ";
-    const char *http_get_end = " HTTP/1.1\r\nHost: ";
-    const char *end_of_line = "\r\nConnection: close\r\n\r\n";
-    char buffer[BUFFER_SIZE];
-    memset(buffer, 0, BUFFER_SIZE);
-    std::snprintf(buffer, sizeof(buffer), "%s%s%s%s", http_get_start, path.c_str(), http_get_end, hostname.c_str());
-
-    // Append end_of_line
-    strncat(buffer, end_of_line, sizeof(buffer) - strlen(buffer) - 1);
-
-    if (send(sockfd, buffer, std::strlen(buffer), 0) == -1) {
+    std::string request = "GET " + path + " HTTP/1.1\r\nHost: " + hostname + "\r\nConnection: close\r\n\r\n";
+    if (send(sockfd, request.c_str(), request.size(), 0) == -1) {
         std::perror("send");
         close(sockfd);
-        return std::to_string(EXIT_FAILURE);
+        return {};
     }
 
-    std::string Response = "";
+    Response response;
+    std::string response_header;
+    char buffer[BUFFER_SIZE];
+    bool header_parsed = false;
 
-    int bytes_received;
-    while ((bytes_received = recv(sockfd, buffer, sizeof(buffer) - 1, 0)) > 0) {
-        buffer[bytes_received] = '\0'; // Null-terminate the buffer
-        Response += buffer;
-        memset(buffer, 0, BUFFER_SIZE);
+    while (int bytes_received = recv(sockfd, buffer, sizeof(buffer) - 1, 0)) {
+        if (bytes_received < 0) {
+            std::perror("recv");
+            break;
+        }
+
+        buffer[bytes_received] = '\0';
+        if (!header_parsed) {
+            std::string chunk(buffer);
+            size_t header_end = chunk.find("\r\n\r\n");
+            if (header_end != std::string::npos) {
+                response_header += chunk.substr(0, header_end + 4);
+                response.body += chunk.substr(header_end + 4);
+                header_parsed = true;
+
+                response.header = handle_response(response_header);
+            } else {
+                response_header += chunk;
+            }
+        } else {
+            response.body += buffer;
+        }
     }
 
-    if (bytes_received == -1) {
-        std::perror("recv");
-    }
     close(sockfd);
-
-    return Response;
+    return response;
 }
 
 std::string getHostnameFromUrl(const std::string& url)
@@ -118,13 +169,12 @@ std::string getHostPathFromUrl(const std::string& url)
     return path;
 }
 
-std::string httpsDownloader(const std::string& url) {
+Response httpsDownloader(std::string& url) {
     int port = 443;
     std::string path = getHostPathFromUrl(url);
     std::string hostname = getHostnameFromUrl(url);
 
-    // Resolve the address
-    struct addrinfo hints, *address;
+    struct addrinfo hints{}, *address;
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
@@ -134,47 +184,42 @@ std::string httpsDownloader(const std::string& url) {
 
     if (getaddrinfo(hostname.c_str(), portStr.c_str(), &hints, &address) != 0) {
         perror("getaddrinfo");
-        return "";
+        return {};
     }
 
-    // Create socket
     int sockfd = socket(address->ai_family, address->ai_socktype, address->ai_protocol);
     if (sockfd == -1) {
         perror("socket");
         freeaddrinfo(address);
-        return "";
+        return {};
     }
 
-    // Connect to the server
     if (connect(sockfd, address->ai_addr, address->ai_addrlen) != 0) {
         perror("connect");
         close(sockfd);
         freeaddrinfo(address);
-        return "";
+        return {};
     }
 
     freeaddrinfo(address);
 
-    // Initialize OpenSSL
     SSL_library_init();
     OpenSSL_add_all_algorithms();
     SSL_load_error_strings();
 
-    // Create SSL context
-    SSL_CTX *ssl_ctx = SSL_CTX_new(TLS_client_method());
+    SSL_CTX* ssl_ctx = SSL_CTX_new(TLS_client_method());
     if (!ssl_ctx) {
         std::cerr << "SSL_CTX_new failed" << std::endl;
         close(sockfd);
-        return "";
+        return {};
     }
 
-    // Create SSL connection
-    SSL *conn = SSL_new(ssl_ctx);
+    SSL* conn = SSL_new(ssl_ctx);
     if (!conn) {
         std::cerr << "SSL_new failed" << std::endl;
         SSL_CTX_free(ssl_ctx);
         close(sockfd);
-        return "";
+        return {};
     }
 
     SSL_set_fd(conn, sockfd);
@@ -183,47 +228,51 @@ std::string httpsDownloader(const std::string& url) {
         SSL_free(conn);
         SSL_CTX_free(ssl_ctx);
         close(sockfd);
-        return "";
+        return {};
     }
 
-    // Construct GET request with the correct path
-    const char *http_get_start = "GET ";
-    const char *http_get_end = " HTTP/1.1\r\nHost: ";
-    const char *end_of_line = "\r\nConnection: close\r\n\r\n";
-    char buffer[BUFFER_SIZE];
-    memset(buffer, 0, BUFFER_SIZE);
-    std::snprintf(buffer, sizeof(buffer), "%s%s%s%s", http_get_start, path.c_str(), http_get_end, hostname.c_str());
-
-    // Append end_of_line
-    strncat(buffer, end_of_line, sizeof(buffer) - strlen(buffer) - 1);
-
-    if (SSL_write(conn, buffer, std::strlen(buffer)) <= 0) {
+    std::string request = "GET " + path + " HTTP/1.1\r\nHost: " + hostname + "\r\nConnection: close\r\n\r\n";
+    if (SSL_write(conn, request.c_str(), request.size()) <= 0) {
         std::cerr << "SSL_write failed" << std::endl;
         SSL_shutdown(conn);
         SSL_free(conn);
         SSL_CTX_free(ssl_ctx);
         close(sockfd);
-        return "";
+        return {};
     }
 
-    // Read the response
-    std::string response;
-    int bytesRead;
-    while ((bytesRead = SSL_read(conn, buffer, sizeof(buffer) - 1)) > 0) {
-        buffer[bytesRead] = '\0'; // Null-terminate the buffer
-        response.append(buffer, bytesRead);
-        memset(buffer, 0, BUFFER_SIZE);
+    Response response;
+    std::string response_header;
+    char buffer[BUFFER_SIZE];
+    bool header_parsed = false;
+
+    while (int bytes_read = SSL_read(conn, buffer, sizeof(buffer) - 1)) {
+        if (bytes_read < 0) {
+            std::cerr << "SSL_read failed" << std::endl;
+            break;
+        }
+
+        buffer[bytes_read] = '\0';
+        if (!header_parsed) {
+            std::string chunk(buffer);
+            size_t header_end = chunk.find("\r\n\r\n");
+            if (header_end != std::string::npos) {
+                response_header += chunk.substr(0, header_end + 4);
+                response.body += chunk.substr(header_end + 4);
+                header_parsed = true;
+
+                response.header = handle_response(response_header);
+            } else {
+                response_header += chunk;
+            }
+        } else {
+            response.body += buffer;
+        }
     }
 
-    if (bytesRead < 0) {
-        std::cerr << "SSL_read failed" << std::endl;
-    }
-
-    // Cleanup
     SSL_shutdown(conn);
     SSL_free(conn);
     SSL_CTX_free(ssl_ctx);
     close(sockfd);
-
     return response;
 }
