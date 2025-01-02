@@ -15,6 +15,16 @@ std::string toLower(const std::string& str) {
     return lowerStr;
 }
 
+std::string getHostname(const std::string& url) {
+    // Extract the hostname from the URL
+    std::regex urlRegex(R"(^(https?://)?([^/]+))");
+    std::smatch match;
+    if (std::regex_search(url, match, urlRegex)) {
+        return match[2].str(); // Return the hostname
+    }
+    return ""; // Return empty string if no match
+}
+
 std::string handleAnchorTag(const std::string& baseUrl, const std::string& tagContent) {
     std::regex hrefRegex(R"(href\s*=\s*["']([^"']+)["'])");
     std::smatch match;
@@ -27,18 +37,18 @@ std::string handleAnchorTag(const std::string& baseUrl, const std::string& tagCo
             return href;
         }
 
+        // Extract the hostname from the base URL
+        std::string hostname = getHostname(baseUrl);
+        if (hostname.empty()) {
+            return ""; // Return empty string if hostname extraction fails
+        }
+
         // Convert relative URL to absolute URL
-        std::string base = baseUrl;
-        if (base.back() != '/') {
-            base += '/';
-        }
-
         if (href.front() == '/') {
-            // Remove trailing slash from base URL if href starts with '/'
-            base = base.substr(0, base.find_last_of('/') + 1);
+            return "https://" + hostname + href;
+        } else {
+            return "https://" + hostname + '/' + href;
         }
-
-        return base + href;
     }
 
     // Return an empty string if no href is found
