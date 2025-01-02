@@ -15,22 +15,44 @@ std::string toLower(const std::string& str) {
     return lowerStr;
 }
 
+void handleAnchorTag(const std::string& tagContent) {
+    // Process the anchor tag content (e.g., extract href attribute or inner text)
+    std::cout << "Anchor tag found: " << tagContent << std::endl;
+}
+
 // TODO: change different tags as < and > could very well be used inefficiently
 std::string stripHTMLTags(const std::string& html) {
     std::string result;
     bool insideTag = false;
+    bool insideAnchor = false;
+    std::string tagBuffer;
     result.reserve(html.size());
 
     for (char ch : html) {
         if (ch == '<') {
             insideTag = true;
+            tagBuffer.clear();
             continue;
         }
         if (ch == '>') {
             insideTag = false;
+            if (!tagBuffer.empty()) {
+                // Detect the anchor tag
+                if (tagBuffer.compare(0, 2, "a ") == 0 || tagBuffer == "a") {
+                    insideAnchor = true;
+                } else if (tagBuffer == "/a") {
+                    insideAnchor = false;
+                }
+
+                if (insideAnchor) {
+                    handleAnchorTag(tagBuffer);
+                }
+            }
             continue;
         }
-        if (!insideTag) {
+        if (insideTag) {
+            tagBuffer += ch;
+        } else if (!insideAnchor) {
             result += ch;
         }
     }
