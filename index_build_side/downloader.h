@@ -26,4 +26,8 @@ Response httpsDownloader(std::string& url);
 std::string getHostnameFromUrl(const std::string& url);
 std::string getHostPathFromUrl(const std::string& url);
 
+// Function to download a page (HTTP or HTTPS)
+Response downloadPage(std::string& url);
+
+
 #endif // DOWNLOADER_H

@@ -1,4 +1,3 @@
-// parser.cpp
 #include "parser.h"
 
 #include <algorithm>
@@ -16,6 +15,16 @@ std::string toLower(const std::string& str) {
     return lowerStr;
 }
 
+std::string getHostname(const std::string& url) {
+    // Extract the hostname from the URL
+    std::regex urlRegex(R"(^(https?://)?([^/]+))");
+    std::smatch match;
+    if (std::regex_search(url, match, urlRegex)) {
+        return match[2].str(); // Return the hostname
+    }
+    return ""; // Return empty string if no match
+}
+
 std::string handleAnchorTag(const std::string& baseUrl, const std::string& tagContent) {
     std::regex hrefRegex(R"(href\s*=\s*["']([^"']+)["'])");
     std::smatch match;
@@ -28,29 +37,27 @@ std::string handleAnchorTag(const std::string& baseUrl, const std::string& tagCo
             return href;
         }
 
+        // Extract the hostname from the base URL
+        std::string hostname = getHostname(baseUrl);
+        if (hostname.empty()) {
+            return ""; // Return empty string if hostname extraction fails
+        }
+
         // Convert relative URL to absolute URL
-        std::string base = baseUrl;
-        if (base.back() != '/') {
-            base += '/';
-        }
-
         if (href.front() == '/') {
-            // Remove trailing slash from base URL if href starts with '/'
-            base = base.substr(0, base.find_last_of('/') + 1);
+            return "https://" + hostname + href;
+        } else {
+            return "https://" + hostname + '/' + href;
         }
-
-        return base + href;
     }
 
     // Return an empty string if no href is found
     return "";
 }
 
-// TODO: change different tags as < and > could very well be used inefficiently
-std::string stripHTMLTags(const std::string& url, const std::string& html) {
+std::string stripHTMLTags(const std::string& url, const std::string& html, std::vector<std::string>& links) {
     std::string result;
     bool insideTag = false;
-    bool insideAnchor = false;
     std::string tagBuffer;
     result.reserve(html.size());
 
@@ -62,24 +69,24 @@ std::string stripHTMLTags(const std::string& url, const std::string& html) {
         }
         if (ch == '>') {
             insideTag = false;
-            if (!tagBuffer.empty()) {
-                // Detect the anchor tag
-                if (tagBuffer.compare(0, 2, "a ") == 0 || tagBuffer == "a") {
-                    insideAnchor = true;
-                } else if (tagBuffer == "/a") {
-                    insideAnchor = false;
-                }
 
-                if (insideAnchor) {
-                    handleAnchorTag(url, tagBuffer);
+            // Process the full tag content
+            if (!tagBuffer.empty()) {
+                // Check if it's an anchor tag
+                if (tagBuffer.find("a ") == 0 || tagBuffer == "a") {
+                    std::string fullAnchor = "<" + tagBuffer + ">";
+                    std::string absoluteUrl = handleAnchorTag(url, fullAnchor);
+                    if (!absoluteUrl.empty()) {
+                        links.push_back(absoluteUrl);
+                    }
                 }
             }
             continue;
         }
         if (insideTag) {
             tagBuffer += ch;
-        } else if (!insideAnchor) {
-            result += ch;
+        } else {
+            result += ch; // Append non-tag content to the result
         }
     }
     return result;
@@ -88,7 +95,7 @@ std::string stripHTMLTags(const std::string& url, const std::string& html) {
 std::vector<std::string> splitIntoWords(const std::string& text) {
     std::vector<std::string> words;
     std::string currentWord;
-    currentWord.reserve(16); // Reserve space to minimize reallocations
+    currentWord.reserve(16);
 
     for (char ch : text) {
         if (std::isalnum(static_cast<unsigned char>(ch))) {
@@ -101,7 +108,6 @@ std::vector<std::string> splitIntoWords(const std::string& text) {
         }
     }
 
-    // Add the last word if exists
     if (!currentWord.empty()) {
         words.push_back(toLower(currentWord));
     }
@@ -111,11 +117,13 @@ std::vector<std::string> splitIntoWords(const std::string& text) {
 
 // The main parser function
 ParsedData parseHTML(const std::string& url, const std::string& html) {
-    // Step 1: Strip HTML tags to get raw text
-    std::string text = stripHTMLTags(url, html);
+    std::vector<std::string> links;
+    
+    // Step 1: Strip HTML tags and collect links
+    std::string text = stripHTMLTags(url, html, links);
 
     // Step 2: Split text into words
     std::vector<std::string> extractedWords = splitIntoWords(text);
 
-    return {url, extractedWords};
+    return {url, extractedWords, links};
 }
