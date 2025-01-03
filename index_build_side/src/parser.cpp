@@ -1,4 +1,4 @@
-#include "parser.h"
+#include "../include/parser.h"
 
 #include <algorithm>
 #include <cctype>
@@ -69,6 +69,10 @@ std::string handleAnchorTag(const std::string& baseUrl, const std::string& tagCo
         // If the href is already an absolute URL, return it
         if (href.find("http://") == 0 || href.find("https://") == 0) {
             return href;
+        }
+
+        if (href.find("//") == 0) {
+            return "https:" + href;
         }
 
         // Extract the hostname from the base URL
