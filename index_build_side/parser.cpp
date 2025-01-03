@@ -5,6 +5,40 @@
 #include <iostream>
 #include <regex>
 
+// Helper function to decode common HTML entities
+std::string decodeHTMLEntities(const std::string& text) {
+    std::string decoded;
+    decoded.reserve(text.size());
+    size_t i = 0;
+    while (i < text.size()) {
+        if (text[i] == '&') {
+            if (text.compare(i, 4, "&lt;") == 0) {
+                decoded += '<';
+                i += 4;
+            }
+            else if (text.compare(i, 4, "&gt;") == 0) {
+                decoded += '>';
+                i += 4;
+            }
+            else if (text.compare(i, 5, "&amp;") == 0) {
+                decoded += '&';
+                i += 5;
+            }
+            // Add more entities as needed
+            else {
+                decoded += text[i];
+                i++;
+            }
+        }
+        else {
+            decoded += text[i];
+            i++;
+        }
+    }
+    return decoded;
+}
+
+
 // Helper function to convert a string to lowercase
 std::string toLower(const std::string& str) {
     std::string lowerStr;
@@ -89,6 +123,9 @@ std::string stripHTMLTags(const std::string& url, const std::string& html, std::
             result += ch; // Append non-tag content to the result
         }
     }
+
+    // Decode HTML entities in the resultant text
+    result = decodeHTMLEntities(result);
     return result;
 }
 
