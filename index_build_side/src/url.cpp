@@ -46,11 +46,6 @@ void URL::parse(const std::string& url_str) {
     hostname = url_str.substr(host_start, host_end - host_start);
     std::transform(hostname.begin(), hostname.end(), hostname.begin(), ::tolower);
 
-    const std::string www_prefix = "www.";
-    if (hostname.find(www_prefix) == 0) {
-        hostname = hostname.substr(www_prefix.length());
-    }
-
     size_t port_pos = hostname.find(':');
     if (port_pos != std::string::npos) {
         std::string port_str = hostname.substr(port_pos + 1);

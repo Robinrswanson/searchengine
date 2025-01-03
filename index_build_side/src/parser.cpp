@@ -71,6 +71,10 @@ std::string handleAnchorTag(const std::string& baseUrl, const std::string& tagCo
             return href;
         }
 
+        if (href.find("//") == 0) {
+            return "https:" + href;
+        }
+
         // Extract the hostname from the base URL
         std::string hostname = getHostname(baseUrl);
         if (hostname.empty()) {

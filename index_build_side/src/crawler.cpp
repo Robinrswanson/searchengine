@@ -119,7 +119,6 @@ void crawl(const URL& startUrl, int maxUrls = 1000, int maxRedirects = 5) {
 
         int redirectCount = 0;
         processUrl(currentUrl, urlQueue, visitedUrls, redirectCount, maxRedirects);
-
         crawlCount++;
     }
 
