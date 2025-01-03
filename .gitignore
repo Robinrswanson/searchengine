@@ -1,2 +1,6 @@
 /.vscode
 *.o
+crawler
+test_downloader
+test_parser
+test_url
